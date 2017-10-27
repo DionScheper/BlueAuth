@@ -1,0 +1,4 @@
+auth	required	/home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/pam_python.so /home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/test.py
+account	required	/home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/pam_python.so /home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/test.py arg1 arg2
+password required	/home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/pam_python.so /home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/test.py
+session	required	/home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/pam_python.so /home/neonlight/Documents/BlueAuth/pam-python-1.0.6/src/test.py

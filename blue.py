@@ -1,51 +1,50 @@
 import bluetooth
 import pam
-
-def discover_device(device_name):
-    print("Discovering devices...")
-    nearby_devices = bluetooth.discover_devices()
-    for bdaddr in nearby_devices:
-        print(bluetooth.lookup_name( bdaddr ) + ":::" + bdaddr)
-        if(bdaddr == device_name):
-            return True
-    return False
-
-
-def connect_to(phone, port):
-    sock = bluetooth.BluetoothSocket( bluetooth.RFCOMM )
-    sock.connect((phone, port))
-
-iphone = "5C:97:F3:50:10:28"
-experia="58:48:22:00:2E:5A"
-con_name = "BlueAuth"
-uuid = "c03d88b8-d291-4e7e-b608-b68a2367329d"
-
-
-# result_dict = bluetooth.find_service(name=con_name,uuid=uuid,address=experia)
-# if(len(result_dict) == 1):
-#     port = result_dict[0]['port']
-#     connect_to(experia, port)
-#
-#
-
+import base64
 #############################################
-sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-sock.bind(("", 1))
-sock.listen(1)
-print("Listening")
-sock.settimeout(60.0)
-csock, address = sock.accept()
-print("Accepted connection")
-# Send challenge
-csock.send("challenge")
-# Receive response
-response = csock.recv(1024)
-# Send succes or failure
-if(response == "response"):
-    print("Succesful challenge response")
-else:
-    print("Failure challenge response")
-csock.close()
-sock.close()
+def authenticate():
+    result = False
+    sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+    sock.bind(("", 1))
+    sock.listen(1)
+    print("Listening BlueAuth")
+    sock.settimeout(60.0)
+    csock, address = sock.accept()
+    #print("Accepted connection")
+    # Send challenge
+    #print("Sending challenge")
+    csock.send("challenge")
+    # Receive response
+    response = csock.recv(1024)
+    #print("Received: ", response)
+    # Send succes or failure
+    if(response == b'response'):
+        #print("Succesful challenge response")
+        result = True
+        csock.send("y")
+    else:
+        #print("Failure challenge response")
+        csock.send("n")
+    csock.close()
+    sock.close()
+    return result
+###############################################
+def pam_sm_authenticate(pamh, flags, argv):
+    if authenticate():
+        return pamh.PAM_SUCCESS
+    return pamh.PAM_AUTH_ERR
 
-print("final")
+def pam_sm_setcred(pamh, flags, argv):
+    return pamh.PAM_SUCCESS
+
+def pam_sm_acct_mgmt(pamh, flags, argv):
+    return pamh.PAM_SUCCESS
+
+def pam_sm_open_session(pamh, flags, argv):
+    return pamh.PAM_SUCCESS
+
+def pam_sm_close_session(pamh, flags, argv):
+    return pamh.PAM_SUCCESS
+
+def pam_sm_chauthtok(pamh, flags, argv):
+    return pamh.PAM_SUCCESS
