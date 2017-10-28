@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.AsyncTask;
-import android.util.Base64;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
@@ -17,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
+import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.Set;
 
 /**
@@ -30,8 +31,10 @@ public class BlueAuth{
     Button authBtn;
     Context context;
     ProtState state;
-    private static final int CHALLENGE_SIZE = 9;
-    private static final int RESPONSE_SIZE = 8;
+    private static final int CHALLENGE_SIZE = 128;
+    private static final int RESPONSE_SIZE = 128;
+    private static final BigInteger SECRET  = new BigInteger("15980825276566239590571158220152381980628708270401139258438696993815358932193248003061016270236075851772094737326384267412827716920179674685527846374113965466104433712614446748114391739196249056212267061311800716727253417012485494558500192103499136306280819443234478481313221062228784985720161016328001681489");
+    private static final BigInteger MODULUS = new BigInteger("125069900423969625513167183696456491266355822058428405013171349998050773625405886598592049594275340709050366945325919003276151192237618263657205453525233716561923402213695623567778362333117173702622386572910559830547887242097802023428298910714674944609028413754889990570586265421100578971326792564496946845503");
 
     private enum ProtState { STATE_OPEN, STATE_CONNECTING, STATE_CONNECTED, STATE_REC_CHALLENGE, STATE_SEN_RESPONSE,
                             STATE_REC_RESULT, STATE_CLOSING, STATE_CLOSED }
@@ -131,16 +134,15 @@ public class BlueAuth{
             @Override
             protected String doInBackground(Void... voids) {
                 if(hk01 == null) {
-                    return MainActivity.COMPUTER_NAME + " not found yet...";
+                    return MainActivity.COMPUTER_NAME + " not found (yet)...";
                 }
-                publishProgress(MainActivity.COMPUTER_NAME + ", now connecting...");
                 BluetoothSocket socket;
                 try {
                     Method m = hk01.getClass().getMethod("createInsecureRfcommSocket", new Class[] {int.class});
                     socket = (BluetoothSocket) m.invoke(hk01, 1);
+                    publishProgress("Connecting to remote host...");
                     socket.connect();
                     if(socket.isConnected()) {
-                        publishProgress("Connected, opening streams");
                         unregister();
                         // Open Streams
                         InputStream is;
@@ -155,21 +157,17 @@ public class BlueAuth{
                         }
                         // Do Protocol
                         // Receive challenge
-                        publishProgress("Receiving challenge");
-                        byte[] challenge = new byte[CHALLENGE_SIZE];
-                        int nr_of_bytes = is.read(challenge);
-                        Log.d(MainActivity.TAG, "Received challenge: " + new String(challenge));
-                        if(nr_of_bytes != CHALLENGE_SIZE) {
-                            socket.close();
-                            return "Challenge size is not correct: " + new String(challenge);
-                        }
+                        byte[] chal = new byte[CHALLENGE_SIZE];
+                        int nr_of_bytes = is.read(chal);
+                        byte[] challenge = Arrays.copyOfRange(chal, 0, nr_of_bytes);
+                        Log.d(MainActivity.TAG, "Received challenge: " + new BigInteger(new String(challenge, "ascii")).toString());
                         // Send response
-                        publishProgress("Sending response");
-                        byte[] response = "response".getBytes();
-                        os.write(response);
+                        BigInteger challengeInt = new BigInteger(new String(challenge, "ascii"));
+                        BigInteger responseInt = challengeInt.modPow(SECRET, MODULUS);
+                        Log.d(MainActivity.TAG, "Response: " + responseInt.toString());
+                        os.write(responseInt.toByteArray());
 
                         // Receive result
-                        publishProgress("Receiving result");
                         byte[] result = new byte[1];
                         nr_of_bytes = is.read(result);
                         if(nr_of_bytes != 1) {
@@ -183,7 +181,7 @@ public class BlueAuth{
                     }
                 } catch(Exception e) {
                     e.printStackTrace();
-                    return "Connection failed, is the host down?";
+                    return "Connection failed, is the host offline?";
                 }
                 return null;
             }
