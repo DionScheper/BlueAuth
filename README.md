@@ -4,7 +4,9 @@ Strong passwords allow a user to protect data, but remembering these passwords c
 It has been known that people choose weak passwords often just to remember them.
 
 # Security Claim
-The security is equivalent to that of having a 'physical key' to your laptop. 
+The token authenticates the user on the machine is the equivalent of having a key to your house.
+Provides at least as much security the above statement.
+And provides at least as much security as a weak password.
 
 ## Security Basis
 1. honest token can convice the honest machine that he has the private key to authenticate user
