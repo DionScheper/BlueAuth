@@ -1,0 +1,1 @@
+The security is equivalent to that of having a 'physical key' to your laptop. If anyone gets the key he can use the physical token to authenticate to the door, but cannot open any other doors. And a dishonest door will not convince the token
