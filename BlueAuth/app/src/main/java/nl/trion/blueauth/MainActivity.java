@@ -1,14 +1,9 @@
 package nl.trion.blueauth;
 
-import android.Manifest;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.view.View;
-import android.widget.Button;
 import android.widget.ImageView;
 
 public class MainActivity extends AppCompatActivity {
@@ -16,11 +11,25 @@ public class MainActivity extends AppCompatActivity {
     private BlueAuth ba;
 
     @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch(item.getItemId()) {
+            case android.R.id.home:
+                onBackPressed();
+                return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        onBackPressed();
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        ImageView resultImageView = (ImageView) findViewById(R.id.resultImageView);
-        resultImageView.setVisibility(View.GONE);
         ba = new BlueAuth(this, BlueAuthDevice.fromString(getIntent().getStringExtra("BlueAuthDevice")));
 
         // Check bluetooth support

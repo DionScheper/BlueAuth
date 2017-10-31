@@ -22,11 +22,6 @@
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:id="@+id/genKeyBtn"
-        android:text="Generate keys"/>
-    <Button
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
         android:id="@+id/addBtn"
         android:text="add"/>

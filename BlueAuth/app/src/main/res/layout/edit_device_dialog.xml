@@ -23,11 +23,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:id="@+id/genKeyBtn"
-        android:text="Generate keys"/>
+        android:text="Generate new keys"/>
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
         android:id="@+id/submitBtn"
         android:text="submit"/>
     <Button

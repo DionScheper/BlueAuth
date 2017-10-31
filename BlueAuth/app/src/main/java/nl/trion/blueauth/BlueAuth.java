@@ -36,7 +36,6 @@ public class BlueAuth{
     private BluetoothDevice machineBTDevice;
     private TextView debugTxt;
     private ProgressBar progressBar;
-    private ImageView resultImageView;
     private ImageView statusImageView;
     private Context context;
     private static final int CHALLENGE_SIZE = 1024;
@@ -70,7 +69,6 @@ public class BlueAuth{
         this.context = activity;
         this.debugTxt = (TextView) ((MainActivity) activity).findViewById(R.id.debugTxt);
         this.progressBar = (ProgressBar) ((MainActivity) activity).findViewById(R.id.progressBar);
-        this.resultImageView = (ImageView) ((MainActivity) activity).findViewById(R.id.resultImageView);
         this.statusImageView = (ImageView) ((MainActivity) activity).findViewById(R.id.statusImageView);
 
         Log.d(MainActivity.TAG, bad.toString());
@@ -132,11 +130,12 @@ public class BlueAuth{
         mBluetoothAdapter.cancelDiscovery();
     }
 
-    private void toggle(boolean done, int color) {
+    private void toggle(boolean done, int color, int drawable) {
         statusImageView.setBackgroundColor(color);
         if(done) {
             progressBar.setVisibility(View.GONE);
             statusImageView.setVisibility(View.VISIBLE);
+            statusImageView.setImageDrawable(context.getDrawable(drawable));
         } else {
             progressBar.setVisibility(View.VISIBLE);
             statusImageView.setVisibility(View.GONE);
@@ -144,7 +143,7 @@ public class BlueAuth{
     }
 
     private void toggle(boolean done) {
-        toggle(done, Color.RED);
+        toggle(done, Color.RED, android.R.drawable.stat_sys_warning);
     }
 
     public boolean bluetoothSupported() {
@@ -224,8 +223,15 @@ public class BlueAuth{
                 if(s.contains("error")) {
                     toggle(true);
                 } else {
-                    toggle(true, Color.GREEN);
+                    toggle(true, Color.GREEN, android.R.drawable.stat_sys_data_bluetooth);
                 }
+                statusImageView.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        toggle(false);
+                        connect();
+                    }
+                });
             }
 
             @Override
