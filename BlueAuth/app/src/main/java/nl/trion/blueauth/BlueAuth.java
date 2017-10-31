@@ -1,5 +1,6 @@
 package nl.trion.blueauth;
 
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -7,9 +8,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.AsyncTask;
+import android.preference.PreferenceManager;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.IOException;
@@ -25,19 +32,17 @@ import java.util.Set;
  */
 
 public class BlueAuth{
-    BluetoothAdapter mBluetoothAdapter;
-    BluetoothDevice hk01;
-    TextView debugTxt;
-    Button authBtn;
-    Context context;
-    ProtState state;
-    private static final int CHALLENGE_SIZE = 128;
-    private static final int RESPONSE_SIZE = 128;
-    private static final BigInteger SECRET  = new BigInteger("15980825276566239590571158220152381980628708270401139258438696993815358932193248003061016270236075851772094737326384267412827716920179674685527846374113965466104433712614446748114391739196249056212267061311800716727253417012485494558500192103499136306280819443234478481313221062228784985720161016328001681489");
-    private static final BigInteger MODULUS = new BigInteger("125069900423969625513167183696456491266355822058428405013171349998050773625405886598592049594275340709050366945325919003276151192237618263657205453525233716561923402213695623567778362333117173702622386572910559830547887242097802023428298910714674944609028413754889990570586265421100578971326792564496946845503");
-
-    private enum ProtState { STATE_OPEN, STATE_CONNECTING, STATE_CONNECTED, STATE_REC_CHALLENGE, STATE_SEN_RESPONSE,
-                            STATE_REC_RESULT, STATE_CLOSING, STATE_CLOSED }
+    private BluetoothAdapter mBluetoothAdapter;
+    private BluetoothDevice machineBTDevice;
+    private TextView debugTxt;
+    private ProgressBar progressBar;
+    private ImageView resultImageView;
+    private ImageView statusImageView;
+    private Context context;
+    private static final int CHALLENGE_SIZE = 1024;
+    private static final int RESPONSE_SIZE = 1024;
+    private BlueAuthDevice bad;
+    private SharedPreferences sp;
 
     // Create a BroadcastReceiver for ACTION_FOUND.
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -50,10 +55,9 @@ public class BlueAuth{
                 Log.d(MainActivity.TAG, deviceHardwareAddress);
                 if(deviceName != null ) {
                     Log.d(MainActivity.TAG, deviceName);
-                    if(deviceName.equals(MainActivity.COMPUTER_NAME)) {
-                        debugTxt.setText("Found " + MainActivity.COMPUTER_NAME);
-                        hk01 = device;
-                        authBtn.setEnabled(true);
+                    if(deviceName.equals(bad.hostName)) {
+                        debugTxt.setText("Found " + bad.hostName);
+                        machineBTDevice = device;
                         mBluetoothAdapter.cancelDiscovery();
                         context.unregisterReceiver(this);
                     }
@@ -62,19 +66,28 @@ public class BlueAuth{
         }
     };
 
-    public BlueAuth(Context context, TextView debugTxt, Button authBtn) {
-        this.context = context;
-        this.debugTxt = debugTxt;
-        this.authBtn = authBtn;
-        state = ProtState.STATE_CLOSED;
+    public BlueAuth(Activity activity, BlueAuthDevice bad) {
+        this.context = activity;
+        this.debugTxt = (TextView) ((MainActivity) activity).findViewById(R.id.debugTxt);
+        this.progressBar = (ProgressBar) ((MainActivity) activity).findViewById(R.id.progressBar);
+        this.resultImageView = (ImageView) ((MainActivity) activity).findViewById(R.id.resultImageView);
+        this.statusImageView = (ImageView) ((MainActivity) activity).findViewById(R.id.statusImageView);
+
+        Log.d(MainActivity.TAG, bad.toString());
+
+        this.bad = bad;
+        this.sp = PreferenceManager.getDefaultSharedPreferences(activity.getApplicationContext());
+
+        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     }
 
     private boolean getIfBonded() {
         Set<BluetoothDevice> pairedDevices = mBluetoothAdapter.getBondedDevices();
         if(pairedDevices.size() > 0) {
             for (BluetoothDevice bd : pairedDevices) {
-                if (bd.getName().equals(MainActivity.COMPUTER_NAME)) {
-                    hk01 = bd;
+                if (bd.getName().equals(bad.hostMac) &&
+                        bd.getAddress().equals(bad.hostMac)) {
+                    machineBTDevice = bd;
                     return true;
                 }
             }
@@ -86,8 +99,8 @@ public class BlueAuth{
         new AsyncTask<Void, Void, String>() {
             @Override
             protected String doInBackground(Void... voids) {
-                hk01 = mBluetoothAdapter.getRemoteDevice(MainActivity.COMPUTER_BT_MAC);
-                if(hk01 != null && MainActivity.COMPUTER_NAME.equals(hk01.getName())) {
+                machineBTDevice = mBluetoothAdapter.getRemoteDevice(bad.hostMac);
+                if(machineBTDevice != null && bad.hostName.equals(machineBTDevice.getName())) {
                     return "Device found (MAC found)";
                 } else if(getIfBonded()) {
                     return "Device found (already bonded)";
@@ -96,15 +109,15 @@ public class BlueAuth{
                     context.registerReceiver(mReceiver, filter);
                     mBluetoothAdapter.startDiscovery();
                     Log.d(MainActivity.TAG, "registered receiver");
-                    return "Not found. Searching for "+ MainActivity.COMPUTER_NAME +"...";
+                    return "Not found. Searching for "+ bad.hostName +"...";
                 }
             }
 
             @Override
             protected void onPostExecute(String result) {
                 debugTxt.setText(result);
-                if(hk01 != null && MainActivity.COMPUTER_NAME.equals(hk01.getName())) {
-                    authBtn.setEnabled(true);
+                if(machineBTDevice != null && bad.hostName.equals(machineBTDevice.getName())) {
+                    connect();
                 }
             }
         }.execute();
@@ -119,10 +132,25 @@ public class BlueAuth{
         mBluetoothAdapter.cancelDiscovery();
     }
 
+    private void toggle(boolean done, int color) {
+        statusImageView.setBackgroundColor(color);
+        if(done) {
+            progressBar.setVisibility(View.GONE);
+            statusImageView.setVisibility(View.VISIBLE);
+        } else {
+            progressBar.setVisibility(View.VISIBLE);
+            statusImageView.setVisibility(View.GONE);
+        }
+    }
+
+    private void toggle(boolean done) {
+        toggle(done, Color.RED);
+    }
+
     public boolean bluetoothSupported() {
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
             debugTxt.setText("You do not support bluetooth or it is disabled");
+            toggle(true);
             return false;
         }
         debugTxt.setText("You support bluetooth");
@@ -133,14 +161,14 @@ public class BlueAuth{
         new AsyncTask<Void, String, String>() {
             @Override
             protected String doInBackground(Void... voids) {
-                if(hk01 == null) {
-                    return MainActivity.COMPUTER_NAME + " not found (yet)...";
+                if(machineBTDevice == null) {
+                    return bad.hostName + " not found error...";
                 }
                 BluetoothSocket socket;
                 try {
-                    Method m = hk01.getClass().getMethod("createInsecureRfcommSocket", new Class[] {int.class});
-                    socket = (BluetoothSocket) m.invoke(hk01, 1);
-                    publishProgress("Connecting to remote host...");
+                    Method m = machineBTDevice.getClass().getMethod("createInsecureRfcommSocket", new Class[] {int.class});
+                    socket = (BluetoothSocket) m.invoke(machineBTDevice, 1);
+                    publishProgress("Connecting to host...");
                     socket.connect();
                     if(socket.isConnected()) {
                         unregister();
@@ -160,28 +188,32 @@ public class BlueAuth{
                         byte[] chal = new byte[CHALLENGE_SIZE];
                         int nr_of_bytes = is.read(chal);
                         byte[] challenge = Arrays.copyOfRange(chal, 0, nr_of_bytes);
-                        Log.d(MainActivity.TAG, "Received challenge: " + new BigInteger(new String(challenge, "ascii")).toString());
+                        Log.d(MainActivity.TAG, "Received challenge: (" + String.valueOf(nr_of_bytes) + ")" + new BigInteger(1, challenge).toString());
                         // Send response
-                        BigInteger challengeInt = new BigInteger(new String(challenge, "ascii"));
-                        BigInteger responseInt = challengeInt.modPow(SECRET, MODULUS);
-                        Log.d(MainActivity.TAG, "Response: " + responseInt.toString());
-                        os.write(responseInt.toByteArray());
+                        BigInteger resul = sign(new BigInteger(1, challenge));
+                        Log.d(MainActivity.TAG, "Sending response: (" + String.valueOf(resul.toByteArray().length) + ")" + resul.toString());
+                        os.write(resul.toByteArray());
 
-                        // Receive result
+                        // Receive result for last UI update
                         byte[] result = new byte[1];
                         nr_of_bytes = is.read(result);
                         if(nr_of_bytes != 1) {
                             socket.close();
-                            return "Result is not correct: " + new String(result);
+                            return "Result error, not correct: " + new String(result);
                         }
 
                         // If we got here we can close, because the protocol succeeded!
                         socket.close();
-                        return "Protocol succes, with result: " + new String(result);
+                        if(new String(result).equals("y")) {
+                            return "Protocol succes!";
+                        } else {
+                            return "Protocol error";
+                        }
+
                     }
                 } catch(Exception e) {
                     e.printStackTrace();
-                    return "Connection failed, is the host offline?";
+                    return "Connection error, is the host offline?";
                 }
                 return null;
             }
@@ -189,7 +221,11 @@ public class BlueAuth{
             @Override
             protected void onPostExecute(String s) {
                 debugTxt.setText(s);
-                authBtn.setEnabled(true);
+                if(s.contains("error")) {
+                    toggle(true);
+                } else {
+                    toggle(true, Color.GREEN);
+                }
             }
 
             @Override
@@ -202,5 +238,25 @@ public class BlueAuth{
                 debugTxt.setText(str);
             }
         }.execute();
+    }
+
+    private BigInteger getPrivateExponent() {
+        return new BigInteger(sp.getString(bad.toString() + "PRIV", "0"));
+    }
+
+    private BigInteger getPublicExponent() {
+        return new BigInteger(sp.getString(bad.toString() + "PUBL", "0"));
+    }
+
+    private BigInteger getModulus() {
+        return new BigInteger(sp.getString(bad.toString() + "MODU", "0"));
+    }
+
+    public boolean verify(BigInteger response, BigInteger challenge) throws Exception{
+        return challenge.equals(response.modPow(getPublicExponent(), getModulus()));
+    }
+
+    public BigInteger sign(BigInteger challenge) throws Exception {
+        return challenge.modPow(getPrivateExponent(), getModulus());
     }
 }
