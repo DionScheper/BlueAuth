@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.preference.PreferenceManager;
-import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -34,30 +33,16 @@ import android.widget.ListView;
 import android.widget.Toast;
 
 import java.io.BufferedWriter;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.Random;
-
-import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
-import javax.crypto.CipherOutputStream;
 
 public class AuthListActivity extends AppCompatActivity {
     private BluetoothAdapter mBluetoothAdapter;
@@ -115,7 +100,7 @@ public class AuthListActivity extends AppCompatActivity {
         devicesListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                Intent connectIntent = new Intent(view.getContext(), MainActivity.class);
+                Intent connectIntent = new Intent(view.getContext(), AuthenticationActivity.class);
                 connectIntent.putExtra("BlueAuthDevice", adapterView.getItemAtPosition(i).toString());
                 startActivity(connectIntent);
             }
@@ -124,7 +109,7 @@ public class AuthListActivity extends AppCompatActivity {
         devicesListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
             public boolean onItemLongClick(AdapterView<?> adapterView, View view, int i, long l) {
-                editDeviceDialog((BlueAuthDevice) adapterView.getItemAtPosition(i), i);
+                editDeviceDialog((BlueAuthDevice) adapterView.getItemAtPosition(i));
                 return true;
             }
         });
@@ -135,7 +120,7 @@ public class AuthListActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() {
-        if((new Date()).getTime() - LAST_TIME_LOGIN > 30000) {
+        if((new Date()).getTime() - LAST_TIME_LOGIN > AUTHENTICATION_DURATION_SECONDS * 1000) {
             showAuthenticationScreen();
         }
         super.onResume();
@@ -154,26 +139,22 @@ public class AuthListActivity extends AppCompatActivity {
         dialog.setContentView(R.layout.add_device_dialog);
         Button addBtn = dialog.findViewById(R.id.addBtn);
         final EditText username = dialog.findViewById(R.id.username);
-        final EditText hostname = dialog.findViewById(R.id.hostname);
         final EditText hostmac = dialog.findViewById(R.id.hostmac);
 
         addBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Toast.makeText(view.getContext(), "Adding device", Toast.LENGTH_SHORT).show();
                 String unString = username.getText().toString();
-                String hnString = hostname.getText().toString();
                 String hmString = hostmac.getText().toString();
-                if(validInput(unString, hnString, hmString)) {
-                    BlueAuthDevice bad = new BlueAuthDevice(unString, hnString, hmString);
+                if(validInput(hmString, unString)) {
+                    BlueAuthDevice bad = new BlueAuthDevice(hmString, unString);
                     List<BlueAuthDevice> devices = BlueAuthDevice.getDevices(view.getContext());
                     devices.add(bad);
                     BlueAuthDevice.saveDevices(devices, view.getContext());
-
                     devicesAdapter = new ArrayAdapter<>(view.getContext(), android.R.layout.simple_list_item_1, BlueAuthDevice.getDevices(view.getContext()));
                     devicesListView.setAdapter(devicesAdapter);
-
                     generateKeyPair(bad);
+                    Toast.makeText(view.getContext(), "Added device", Toast.LENGTH_SHORT).show();
                     dialog.dismiss();
                 }
             }
@@ -181,34 +162,30 @@ public class AuthListActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    public void editDeviceDialog(final BlueAuthDevice bad, final int position) {
+    public void editDeviceDialog(final BlueAuthDevice bad) {
         final Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.edit_device_dialog);
         Button genKeys = dialog.findViewById(R.id.genKeyBtn);
         Button submitBtn = dialog.findViewById(R.id.submitBtn);
         Button deleteBtn = dialog.findViewById(R.id.deleteBtn);
         final EditText username = dialog.findViewById(R.id.username);
-        final EditText hostname = dialog.findViewById(R.id.hostname);
         final EditText hostmac = dialog.findViewById(R.id.hostmac);
-
         username.setText(bad.username);
-        hostname.setText(bad.hostName);
         hostmac.setText(bad.hostMac);
 
         genKeys.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 final String unString = username.getText().toString();
-                final String hnString = hostname.getText().toString();
                 final String hmString = hostmac.getText().toString();
-                if(validInput(unString, hnString, hmString)) {
+                if(validInput(hmString, unString)) {
                     AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(view.getContext());
                     alertDialogBuilder.setTitle("Create RSA key pair")
                             .setMessage("Are you sure you want to create new keys? You have to add the public exponents to the end point.")
                             .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                                 @Override
                                 public void onClick(DialogInterface dialogInterface, int i) {
-                                    generateKeyPair(new BlueAuthDevice(unString, hnString, hmString));
+                                    generateKeyPair(new BlueAuthDevice(hmString, unString));
                                     Toast.makeText(getBaseContext(), "Generated Keys", Toast.LENGTH_SHORT).show();
                                 }
                             }).show();
@@ -240,12 +217,11 @@ public class AuthListActivity extends AppCompatActivity {
         submitBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Toast.makeText(view.getContext(), "Edited device", Toast.LENGTH_SHORT).show();
+                Toast.makeText(view.getContext(), "Saved device", Toast.LENGTH_SHORT).show();
                 String unString = username.getText().toString();
-                String hnString = hostname.getText().toString();
                 String hmString = hostmac.getText().toString();
-                if(validInput(unString, hnString, hmString)) {
-                    BlueAuthDevice newbad = new BlueAuthDevice(unString, hnString, hmString);
+                if(validInput(hmString, unString)) {
+                    BlueAuthDevice newbad = new BlueAuthDevice(hmString, unString);
                     List<BlueAuthDevice> devices = BlueAuthDevice.getDevices(view.getContext());
                     devices.remove(bad);
                     devices.add(newbad);
@@ -260,16 +236,12 @@ public class AuthListActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private boolean validInput(String username, String hostname, String hostmac) {
-        return username.indexOf(';') == -1 && hostname.indexOf(';') == -1 && hostmac.indexOf(';') == -1;
-    }
-
-    public boolean isExternalStorageWritable() {
-        return (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()));
+    private boolean validInput(String username, String hostmac) {
+        return username.indexOf(';') == -1 && hostmac.indexOf(';') == -1;
     }
 
     private boolean savePublicKeys(List<BlueAuthDevice> devices) {
-        if(isExternalStorageWritable()) {
+        if(Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
             File documents = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
             File publicKeysFile = new File(documents, "devices.txt");
             try {
@@ -293,21 +265,16 @@ public class AuthListActivity extends AppCompatActivity {
                 MediaScannerConnection.scanFile(this,
                         new String[] { publicKeysFile.toString() }, null,
                         new MediaScannerConnection.OnScanCompletedListener() {
-                            public void onScanCompleted(String path, Uri uri) {
-                                Log.i("ExternalStorage", "Scanned " + path + ":");
-                                Log.i("ExternalStorage", "-> uri=" + uri);
-                            }
+                            public void onScanCompleted(String path, Uri uri) {}
                         });
             } catch(IOException e) {
                 e.printStackTrace();
                 return false;
             }
-            return true;
-        } else {
-            for (BlueAuthDevice bad : devices) {
-                Log.d("KEY", bad.toString() + ";;;" + sp.getString(bad.toString() + "PUBL", ""));
-                Log.d("KEY", bad.toString() + ";;;" + sp.getString(bad.toString() + "MODU", ""));
-            }
+        }
+        for (BlueAuthDevice bad : devices) {
+            Log.d("KEY", bad.toString() + ";;;" + sp.getString(bad.toString() + "PUBL", ""));
+            Log.d("KEY", bad.toString() + ";;;" + sp.getString(bad.toString() + "MODU", ""));
         }
         return true;
     }
@@ -323,7 +290,6 @@ public class AuthListActivity extends AppCompatActivity {
                     KeyPair kp = kpg.generateKeyPair();
                     RSAPrivateKey privateKey = (RSAPrivateKey) kp.getPrivate();
                     RSAPublicKey publicKey = (RSAPublicKey) kp.getPublic();
-
                     spe = sp.edit();
                     spe.putString(thrBad.toString() + "PRIV", privateKey.getPrivateExponent().toString());
                     spe.putString(thrBad.toString() + "PUBL", publicKey.getPublicExponent().toString());
@@ -337,7 +303,7 @@ public class AuthListActivity extends AppCompatActivity {
 
             @Override
             protected void onPostExecute(Void aVoid) {
-                Toast.makeText(getBaseContext(), "Keys generated", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getBaseContext(), "Keypair generated", Toast.LENGTH_SHORT).show();
             }
         }.execute();
     }
@@ -345,21 +311,18 @@ public class AuthListActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS) {
-            // Challenge completed, proceed with using cipher
             if (resultCode == RESULT_OK) {
+                // Challenge completed, do not ask for the next 30 seconds
                 LAST_TIME_LOGIN = (new Date()).getTime();
-                Log.d(MainActivity.TAG, "User Authenticated");
+                Log.d(AuthenticationActivity.TAG, "User Authenticated");
             } else {
-                // The user canceled or didn’t complete the lock screen
-                // operation. Go to error/cancellation flow.
+                // The user canceled or didn’t complete the lock screen operation. Go to error/cancellation flow.
                 finish();
             }
         }
     }
 
     private void showAuthenticationScreen() {
-        // Create the Confirm Credentials screen. You can customize the title and description. Or
-        // we will provide a generic one for you if you leave it null
         Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent("BlueAuth Confirm Identity", "BlueAuth protects your identity and keyring. Your key ring will only be unlocked if you have acces to a method to unlock the phone");
         if (intent != null) {
             startActivityForResult(intent, REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS);

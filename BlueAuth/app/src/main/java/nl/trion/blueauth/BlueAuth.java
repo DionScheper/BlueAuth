@@ -1,31 +1,19 @@
 package nl.trion.blueauth;
 
-import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.os.AsyncTask;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ImageView;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.Set;
 
 /**
  * Created by irrlicht on 10/26/17.
@@ -34,125 +22,24 @@ import java.util.Set;
 public class BlueAuth{
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothDevice machineBTDevice;
-    private TextView debugTxt;
-    private ProgressBar progressBar;
-    private ImageView statusImageView;
-    private Context context;
-    private static final int CHALLENGE_SIZE = 1024;
-    private static final int RESPONSE_SIZE = 1024;
+    private BlueAuthCallback callback;
+    private static final int CHALLENGE_SIZE = 128;
     private BlueAuthDevice bad;
     private SharedPreferences sp;
 
-    // Create a BroadcastReceiver for ACTION_FOUND.
-    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                String deviceName = device.getName();
-                String deviceHardwareAddress = device.getAddress(); // MAC address
-                Log.d(MainActivity.TAG, deviceHardwareAddress);
-                if(deviceName != null ) {
-                    Log.d(MainActivity.TAG, deviceName);
-                    if(deviceName.equals(bad.hostName)) {
-                        debugTxt.setText("Found " + bad.hostName);
-                        machineBTDevice = device;
-                        mBluetoothAdapter.cancelDiscovery();
-                        context.unregisterReceiver(this);
-                    }
-                }
-            }
-        }
-    };
-
-    public BlueAuth(Activity activity, BlueAuthDevice bad) {
-        this.context = activity;
-        this.debugTxt = (TextView) ((MainActivity) activity).findViewById(R.id.debugTxt);
-        this.progressBar = (ProgressBar) ((MainActivity) activity).findViewById(R.id.progressBar);
-        this.statusImageView = (ImageView) ((MainActivity) activity).findViewById(R.id.statusImageView);
-
-        Log.d(MainActivity.TAG, bad.toString());
-
+    public BlueAuth(BlueAuthCallback callback, BlueAuthDevice bad) {
         this.bad = bad;
-        this.sp = PreferenceManager.getDefaultSharedPreferences(activity.getApplicationContext());
-
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-    }
-
-    private boolean getIfBonded() {
-        Set<BluetoothDevice> pairedDevices = mBluetoothAdapter.getBondedDevices();
-        if(pairedDevices.size() > 0) {
-            for (BluetoothDevice bd : pairedDevices) {
-                if (bd.getName().equals(bad.hostMac) &&
-                        bd.getAddress().equals(bad.hostMac)) {
-                    machineBTDevice = bd;
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public void findDevice() {
-        new AsyncTask<Void, Void, String>() {
-            @Override
-            protected String doInBackground(Void... voids) {
-                machineBTDevice = mBluetoothAdapter.getRemoteDevice(bad.hostMac);
-                if(machineBTDevice != null && bad.hostName.equals(machineBTDevice.getName())) {
-                    return "Device found (MAC found)";
-                } else if(getIfBonded()) {
-                    return "Device found (already bonded)";
-                } else {
-                    IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-                    context.registerReceiver(mReceiver, filter);
-                    mBluetoothAdapter.startDiscovery();
-                    Log.d(MainActivity.TAG, "registered receiver");
-                    return "Not found. Searching for "+ bad.hostName +"...";
-                }
-            }
-
-            @Override
-            protected void onPostExecute(String result) {
-                debugTxt.setText(result);
-                if(machineBTDevice != null && bad.hostName.equals(machineBTDevice.getName())) {
-                    connect();
-                }
-            }
-        }.execute();
-    }
-
-    public void unregister() {
-        try{
-            context.unregisterReceiver(mReceiver);
-        } catch (Exception e) {
-            // receiver not registered
-        }
-        mBluetoothAdapter.cancelDiscovery();
-    }
-
-    private void toggle(boolean done, int color, int drawable) {
-        statusImageView.setBackgroundColor(color);
-        if(done) {
-            progressBar.setVisibility(View.GONE);
-            statusImageView.setVisibility(View.VISIBLE);
-            statusImageView.setImageDrawable(context.getDrawable(drawable));
-        } else {
-            progressBar.setVisibility(View.VISIBLE);
-            statusImageView.setVisibility(View.GONE);
-        }
-    }
-
-    private void toggle(boolean done) {
-        toggle(done, Color.RED, android.R.drawable.stat_sys_warning);
+        this.sp = PreferenceManager.getDefaultSharedPreferences(callback.getContext());
+        this.mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        this.callback = callback;
     }
 
     public boolean bluetoothSupported() {
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
-            debugTxt.setText("You do not support bluetooth or it is disabled");
-            toggle(true);
+            callback.blueAuthError("You do not support bluetooth or it is disabled");
             return false;
         }
-        debugTxt.setText("You support bluetooth");
+        callback.blueAuthProgress("You support bluetooth");
         return true;
     }
 
@@ -160,17 +47,13 @@ public class BlueAuth{
         new AsyncTask<Void, String, String>() {
             @Override
             protected String doInBackground(Void... voids) {
-                if(machineBTDevice == null) {
-                    return bad.hostName + " not found error...";
-                }
-                BluetoothSocket socket;
                 try {
-                    Method m = machineBTDevice.getClass().getMethod("createInsecureRfcommSocket", new Class[] {int.class});
-                    socket = (BluetoothSocket) m.invoke(machineBTDevice, 1);
+                    machineBTDevice = mBluetoothAdapter.getRemoteDevice(bad.hostMac);
+                    Method m = machineBTDevice.getClass().getMethod("createInsecureRfcommSocket", int.class);
+                    BluetoothSocket socket = (BluetoothSocket) m.invoke(machineBTDevice, 1);
                     publishProgress("Connecting to host...");
                     socket.connect();
                     if(socket.isConnected()) {
-                        unregister();
                         // Open Streams
                         InputStream is;
                         OutputStream os;
@@ -184,13 +67,12 @@ public class BlueAuth{
                         }
                         // Do Protocol
                         // Receive challenge
-                        byte[] chal = new byte[CHALLENGE_SIZE];
-                        int nr_of_bytes = is.read(chal);
-                        byte[] challenge = Arrays.copyOfRange(chal, 0, nr_of_bytes);
-                        Log.d(MainActivity.TAG, "Received challenge: (" + String.valueOf(nr_of_bytes) + ")" + new BigInteger(1, challenge).toString());
-                        // Send response
+                        byte[] challenge = new byte[CHALLENGE_SIZE];
+                        int nr_of_bytes = is.read(challenge);
                         BigInteger resul = sign(new BigInteger(1, challenge));
-                        Log.d(MainActivity.TAG, "Sending response: (" + String.valueOf(resul.toByteArray().length) + ")" + resul.toString());
+                        Log.d(AuthenticationActivity.TAG, "Received challenge: (" + String.valueOf(nr_of_bytes) + ")" + new BigInteger(1, challenge).toString());
+                        // Send response
+                        Log.d(AuthenticationActivity.TAG, "Sending response: (" + String.valueOf(resul.toByteArray().length) + ")" + resul.toString());
                         os.write(resul.toByteArray());
 
                         // Receive result for last UI update
@@ -198,7 +80,7 @@ public class BlueAuth{
                         nr_of_bytes = is.read(result);
                         if(nr_of_bytes != 1) {
                             socket.close();
-                            return "Result error, not correct: " + new String(result);
+                            return "Result error, protocol is not followed.";
                         }
 
                         // If we got here we can close, because the protocol succeeded!
@@ -219,16 +101,15 @@ public class BlueAuth{
 
             @Override
             protected void onPostExecute(String s) {
-                debugTxt.setText(s);
                 if(s.contains("error")) {
-                    toggle(true);
+                    callback.blueAuthError(s);
                 } else {
-                    toggle(true, Color.GREEN, android.R.drawable.stat_sys_data_bluetooth);
+                    callback.blueAuthSucces(s);
                 }
-                statusImageView.setOnClickListener(new View.OnClickListener() {
+                callback.setRetryOnClick(new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        toggle(false);
+                        callback.blueAuthProgress("Retry");
                         connect();
                     }
                 });
@@ -240,8 +121,8 @@ public class BlueAuth{
                 if(values.length > 0) {
                     str = values[values.length - 1];
                 }
-                Log.d(MainActivity.TAG, "onProgressUpdate: " + str);
-                debugTxt.setText(str);
+                Log.d(AuthenticationActivity.TAG, "onProgressUpdate: " + str);
+                callback.blueAuthProgress(str);
             }
         }.execute();
     }

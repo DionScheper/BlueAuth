@@ -10,11 +10,6 @@
         android:hint="username"
         android:layout_height="wrap_content" />
     <EditText
-        android:id="@+id/hostname"
-        android:layout_width="match_parent"
-        android:hint="hostname"
-        android:layout_height="wrap_content" />
-    <EditText
         android:id="@+id/hostmac"
         android:layout_width="match_parent"
         android:hint="hostmac"
@@ -28,7 +23,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:id="@+id/submitBtn"
-        android:text="submit"/>
+        android:text="save"/>
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

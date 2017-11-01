@@ -1,6 +1,7 @@
 package nl.trion.blueauth;
 
 import android.content.Context;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -10,7 +11,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.security.interfaces.RSAPublicKey;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,26 +20,24 @@ import java.util.List;
 
 public class BlueAuthDevice {
     String username;
-    String hostName;
     String hostMac;
 
-    public BlueAuthDevice(String username, String hostName, String hostMac) {
+    public BlueAuthDevice(String hostMac, String username) {
         this.username = username;
-        this.hostName = hostName;
         this.hostMac  = hostMac ;
     }
 
     @Override
     public String toString() {
-        return this.username + ";" + this.hostName + ";" + this.hostMac;
+        return this.hostMac +  ";" + this.username;
     }
 
     public static BlueAuthDevice fromString(String s) {
         String[] list = s.split(";");
-        if(list.length != 3) {
+        if(list.length != 2) {
             throw new UnsupportedOperationException("This is not a BlueAuthDevice");
         }
-        return new BlueAuthDevice(list[0], list[1], list[2]);
+        return new BlueAuthDevice(list[0], list[1]);
     }
 
     @Override
@@ -47,7 +45,7 @@ public class BlueAuthDevice {
         if(!obj.getClass().equals(this.getClass()))
             return false;
         BlueAuthDevice bad = (BlueAuthDevice) obj;
-        return this.hostMac.equals(bad.hostMac) && this.username.equals(bad.username) && this.hostName.equals(bad.hostName);
+        return this.hostMac.equals(bad.hostMac) && this.username.equals(bad.username);
     }
 
     public static boolean saveDevices(List<BlueAuthDevice> devices, Context context) {
@@ -86,7 +84,7 @@ public class BlueAuthDevice {
                 try {
                     devicesList.add(BlueAuthDevice.fromString(line));
                 } catch(UnsupportedOperationException e) {
-
+                    Log.d(AuthenticationActivity.TAG, "Device is not a device: " + line);
                 }
                 line = reader.readLine();
             }
@@ -98,15 +96,5 @@ public class BlueAuthDevice {
             return new ArrayList<>();
         }
         return devicesList;
-    }
-
-    public List<BlueAuthDevice> getFromList(List<BlueAuthDevice> devices) {
-        List<BlueAuthDevice> list = new ArrayList<>();
-        for (int i = 0; i < devices.size(); i++) {
-            if (devices.get(i).hostName.equals(this.hostName) && devices.get(i).hostMac.equals(this.hostMac)) {
-                list.add(devices.get(i));
-            }
-        }
-        return list;
     }
 }

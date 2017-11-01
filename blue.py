@@ -35,7 +35,7 @@ def authenticate(username):
     csock, address = sock.accept()
     #print("Accepted connection")
     # Send challenge
-    challenge = random.getrandbits(256)
+    challenge = random.getrandbits(1024)
     #print("Challenge: %s\n\n" % challenge)
     csock.send(to_bytes(challenge))
     # Receive response
