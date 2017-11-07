@@ -17,3 +17,6 @@ The equivalents to the real world scenarios:
 1. Your key will open the door to your house
 2. A random key will not open the door and cannot force the door to open
 3. Using your key on someone elses door will not enable the owner of that door to copy your key
+
+This works using pam_python:
+pip2 install pybluez
