@@ -323,9 +323,9 @@ public class AuthListActivity extends AppCompatActivity {
     }
 
     private void showAuthenticationScreen() {
-        Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent("BlueAuth Confirm Identity", "BlueAuth protects your identity and keyring. Your key ring will only be unlocked if you have acces to a method to unlock the phone");
+/*        Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent("BlueAuth Confirm Identity", "BlueAuth protects your identity and keyring. Your key ring will only be unlocked if you have acces to a method to unlock the phone");
         if (intent != null) {
             startActivityForResult(intent, REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS);
-        }
+        }*/
     }
 }
